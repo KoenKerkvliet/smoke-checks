@@ -1,13 +1,14 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+/* global supabase */
 const cfg = window.SMOKE_CONFIG;
-if (!cfg?.supabaseUrl || !cfg?.supabaseAnonKey) {
-  document.getElementById("loading").textContent =
-    "Geen config.js gevonden. Kopieer config.example.js → config.js en vul je Supabase-gegevens in.";
-  throw new Error("Missing config");
+const loadingEl = document.getElementById("loading");
+
+if (!window.supabase || !cfg?.supabaseUrl || !cfg?.supabaseAnonKey) {
+  loadingEl.textContent =
+    "Geen config of Supabase-library geladen. Controleer config.js (URL + anon key).";
+  throw new Error("Missing config/library");
 }
 
-const supabase = createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+const db = supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 
 const el = (id) => document.getElementById(id);
 const show = (id, on = true) => el(id).toggleAttribute("hidden", !on);
@@ -23,20 +24,20 @@ async function render(session) {
 el("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   el("login-error").textContent = "";
-  const { error } = await supabase.auth.signInWithPassword({
+  const { error } = await db.auth.signInWithPassword({
     email: el("email").value,
     password: el("password").value,
   });
   if (error) el("login-error").textContent = error.message;
 });
 
-el("logout").addEventListener("click", () => supabase.auth.signOut());
+el("logout").addEventListener("click", () => db.auth.signOut());
 
-supabase.auth.onAuthStateChange((_event, session) => render(session));
-supabase.auth.getSession().then(({ data }) => render(data.session));
+db.auth.onAuthStateChange((_event, session) => render(session));
+db.auth.getSession().then(({ data }) => render(data.session));
 
 async function loadData() {
-  const { data: run } = await supabase
+  const { data: run } = await db
     .from("runs")
     .select("*")
     .order("created_at", { ascending: false })
@@ -49,7 +50,7 @@ async function loadData() {
     return;
   }
 
-  const { data: checks } = await supabase
+  const { data: checks } = await db
     .from("checks")
     .select("*")
     .eq("run_id", run.id)
@@ -76,7 +77,7 @@ async function siteCard(slug, checks) {
     checks.map(async (c) => {
       let img = "";
       if (c.screenshot_key) {
-        const { data } = await supabase.storage
+        const { data } = await db.storage
           .from("screenshots")
           .createSignedUrl(c.screenshot_key, 600);
         if (data?.signedUrl) img = `<a href="${data.signedUrl}" target="_blank">screenshot</a>`;
