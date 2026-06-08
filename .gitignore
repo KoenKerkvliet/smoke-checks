@@ -1,0 +1,8 @@
+node_modules/
+results/
+.env
+*.local
+.DS_Store
+
+# dashboard/config.js bevat alleen de PUBLIEKE anon-key en MOET mee voor GitHub Pages.
+# Daarom NIET genegeerd. (De service-key staat nooit in de repo, alleen in Actions secrets.)

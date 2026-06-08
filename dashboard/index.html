@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smoke-checks dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Smoke-checks</h1>
+      <button id="logout" hidden>Uitloggen</button>
+    </header>
+
+    <main id="app">
+      <section id="login" hidden>
+        <form id="login-form" class="card">
+          <h2>Inloggen</h2>
+          <label>E-mail<input type="email" id="email" required autocomplete="email" /></label>
+          <label>Wachtwoord<input type="password" id="password" required autocomplete="current-password" /></label>
+          <button type="submit">Inloggen</button>
+          <p id="login-error" class="error"></p>
+        </form>
+      </section>
+
+      <section id="dashboard" hidden>
+        <div id="meta" class="meta"></div>
+        <div id="sites" class="grid"></div>
+      </section>
+
+      <p id="loading">Laden…</p>
+    </main>
+
+    <!-- config.js bevat de (publieke) Supabase URL + anon key -->
+    <script src="config.js"></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,48 @@
+name: smoke-checks
+
+on:
+  # Handmatig starten (optioneel één site via 'site'-input).
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Site-slug (leeg = alle sites)"
+        required: false
+        default: ""
+  # Getriggerd door een WordPress-site na een plugin-update.
+  repository_dispatch:
+    types: [site-updated]
+  # Optioneel: dagelijkse vangnet-run (06:00 UTC). Verwijder als niet gewenst.
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Playwright browser installeren
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke-checks draaien
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RUN_TRIGGER: ${{ github.event_name }}
+          SITE_FILTER: ${{ github.event.inputs.site || github.event.client_payload.site || '' }}
+        run: npm run smoke
+
+      - name: Resultaten als artifact bewaren
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results
+          path: results/
+          retention-days: 14

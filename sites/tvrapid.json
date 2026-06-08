@@ -1,0 +1,13 @@
+{
+  "slug": "tvrapid",
+  "name": "TV Rapid",
+  "baseUrl": "https://tvrapid.nl",
+  "checks": [
+    {
+      "name": "Home",
+      "path": "/",
+      "requiredSelectors": ["header", "footer"],
+      "screenshot": true
+    }
+  ]
+}
