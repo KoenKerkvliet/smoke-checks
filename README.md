@@ -81,6 +81,23 @@ Broncode in `supabase/functions/enroll-site/`. Deploy met `verify_jwt=false`
 (eigen secret-auth). Het secret staat in de privé-tabel `app_config`
 (`key = 'enroll_secret'`), alleen leesbaar met de service-role.
 
+## E-mailnotificatie (emailit)
+
+Na een run met problemen (fails of drift, niet 'geblokkeerd') stuurt de runner de
+edge function `send-report` aan, die via emailit een NL-rapport mailt.
+
+Secrets instellen in **Supabase → Edge Functions → Secrets**:
+
+| Naam | Voorbeeld |
+|---|---|
+| `EMAILIT_API_KEY` | je emailit API-key |
+| `EMAILIT_FROM` | `Smoke-checks <noreply@jouwdomein.nl>` (geverifieerd domein) |
+| `REPORT_EMAIL` | ontvanger, bv. `jij@jouwdomein.nl` |
+| `EMAILIT_REPLY_TO` | optioneel, bv. `support@jouwdomein.nl` |
+
+Zonder `EMAILIT_API_KEY`/`REPORT_EMAIL` doet de functie niets (skip). De runner
+authenticeert met de service-role-key (`verify_jwt=true`).
+
 ## Een site toevoegen
 
 Nieuw bestand `sites/<slug>.json`:

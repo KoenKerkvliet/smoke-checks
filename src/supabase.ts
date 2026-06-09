@@ -90,11 +90,11 @@ export async function saveBaselines(
 
 /* ---------------- Run-resultaten ---------------- */
 
-export async function uploadResults(summary: RunSummary, resultsDir: string): Promise<void> {
+export async function uploadResults(summary: RunSummary, resultsDir: string): Promise<string | null> {
   const db = getClient();
   if (!db) {
     console.log("ℹ Geen Supabase-credentials — alleen lokale results/latest.json geschreven.");
-    return;
+    return null;
   }
 
   const { data: run, error: runErr } = await db
@@ -140,4 +140,30 @@ export async function uploadResults(summary: RunSummary, resultsDir: string): Pr
   }
 
   console.log(`✓ Geüpload naar Supabase (run ${runId}, mode ${summary.mode}).`);
+  return runId;
+}
+
+/**
+ * Vraagt de send-report edge function om een e-mailrapport te sturen (alleen bij problemen).
+ * Authenticeert met de service-role-key als bearer (de functie draait verify_jwt=true).
+ */
+export async function maybeSendReport(runId: string): Promise<void> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key || !runId) return;
+
+  try {
+    const resp = await fetch(`${url.replace(/\/$/, "")}/functions/v1/send-report`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ run_id: runId }),
+    });
+    const data = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
+    if (data.sent) console.log(`✉ E-mailrapport verstuurd (${data.problems} probleem/problemen).`);
+    else if (data.skipped) console.log(`ℹ E-mail overgeslagen: ${data.skipped}`);
+    else if (data.no_problems) console.log("ℹ Geen e-mail nodig (geen problemen).");
+    else if (!resp.ok) console.error(`E-mailrapport faalde: ${resp.status}`, data);
+  } catch (e) {
+    console.error("E-mailrapport mislukt:", e instanceof Error ? e.message : e);
+  }
 }

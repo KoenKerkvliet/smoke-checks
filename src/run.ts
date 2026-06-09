@@ -7,7 +7,7 @@ import { loadSites } from "./config";
 import { crawlSite } from "./crawl";
 import { visitPage } from "./fingerprint";
 import { compareFingerprints, looksBlocked } from "./diff";
-import { uploadResults, loadBaselines, saveBaselines } from "./supabase";
+import { uploadResults, loadBaselines, saveBaselines, maybeSendReport } from "./supabase";
 import type { VisitResult } from "./fingerprint";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -212,9 +212,16 @@ async function main(): Promise<void> {
   writeFileSync(join(RESULTS_DIR, "latest.json"), JSON.stringify(summary, null, 2));
   console.log(`\n${summary.totals.passed}/${summary.totals.total} geslaagd (mode: ${mode}).`);
 
-  await uploadResults(summary, RESULTS_DIR).catch((e) =>
-    console.error("Supabase-upload overgeslagen/mislukt:", e instanceof Error ? e.message : e),
+  const runId = await uploadResults(summary, RESULTS_DIR).catch((e) => {
+    console.error("Supabase-upload overgeslagen/mislukt:", e instanceof Error ? e.message : e);
+    return null;
+  });
+
+  // E-mailrapport bij echte problemen (fails of niet-geblokkeerde drift).
+  const notable = all.some(
+    (c) => c.status === "fail" || (c.deviations ?? []).some((d) => d.field !== "blocked"),
   );
+  if (runId && notable) await maybeSendReport(runId);
 
   // Alleen test-runs falen de CI bij afwijkingen; een scan legt enkel vast.
   if (mode === "test" && summary.totals.failed > 0) process.exitCode = 1;
