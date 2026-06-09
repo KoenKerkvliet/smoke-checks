@@ -59,12 +59,16 @@ mu-plugin op de site. Die doet twee dingen:
    dashboard en moet daar goedgekeurd worden (edge function `enroll-site`).
 2. **Trigger** na elke plugin-update → start een run voor die site.
 
-Config in `wp-config.php`:
+**Aanmelden werkt zero-config**: het enrollment-token zit als default in het
+snippet (bewust publiek — aanmeldingen zijn approval-gated, dus het token is een
+spam-filter, geen geheim). Zodra DP Toolbox draait meldt de site zich aan.
+
+Optioneel in `wp-config.php`:
 
 ```php
-define('SMOKE_ENROLL_SECRET', '...');        // enroll-secret uit Supabase (app_config)
-define('SMOKE_GH_TOKEN', 'github_pat_...');  // optioneel: fine-grained PAT voor de update-trigger
-// define('SMOKE_SITE_SLUG', 'eigen-slug');  // optioneel; standaard afgeleid van de host
+define('SMOKE_GH_TOKEN', 'github_pat_...');  // ECHT geheim: PAT voor de update-trigger
+// define('SMOKE_ENROLL_SECRET', '...');     // eigen enrollment-token i.p.v. de default
+// define('SMOKE_SITE_SLUG', 'eigen-slug');  // standaard afgeleid van de host
 ```
 
 De slug wordt standaard afgeleid van de host (`tvrapid.nl` → `tvrapid-nl`).
