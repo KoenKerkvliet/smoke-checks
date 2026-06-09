@@ -11,6 +11,7 @@ export async function crawlSite(
   siteSlug: string,
   resultsDir: string,
   limit = 15,
+  delayMs = 0,
 ): Promise<VisitResult[]> {
   const origin = new URL(baseUrl).origin;
   const seen = new Set<string>();
@@ -36,6 +37,11 @@ export async function crawlSite(
       if (!seen.has(p) && !queue.includes(p) && results.length + queue.length < limit) {
         queue.push(p);
       }
+    }
+
+    // Beleefde pauze tegen rate-limiting (strenge hosts blokkeren snel verkeer).
+    if (delayMs > 0 && queue.length > 0 && results.length < limit) {
+      await new Promise((r) => setTimeout(r, delayMs));
     }
   }
 

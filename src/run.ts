@@ -14,6 +14,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const RESULTS_DIR = join(ROOT, "results");
 const CRAWL_LIMIT = Number(process.env.CRAWL_LIMIT) || 15;
+const REQUEST_DELAY_MS = Number(process.env.REQUEST_DELAY_MS) || 1200;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Realistische browser-UA i.p.v. Playwright's "HeadlessChrome" (triggert minder bot-protectie).
 const USER_AGENT =
@@ -49,7 +52,7 @@ function blockedResult(slug: string, path: string, v: VisitResult, suffix: strin
 /* ---------------- Scan: nulmeting vastleggen ---------------- */
 async function scanSite(browser: Browser, site: SiteConfig): Promise<CheckResult[]> {
   const ctx = await newCtx(browser);
-  const visits = await crawlSite(ctx, site.baseUrl, site.slug, RESULTS_DIR, CRAWL_LIMIT);
+  const visits = await crawlSite(ctx, site.baseUrl, site.slug, RESULTS_DIR, CRAWL_LIMIT, REQUEST_DELAY_MS);
   await ctx.close();
 
   const baselines: Baseline[] = visits
@@ -113,7 +116,10 @@ async function testSite(browser: Browser, site: SiteConfig): Promise<CheckResult
     ];
   }
 
+  let firstPage = true;
   for (const base of baselines) {
+    if (!firstPage) await sleep(REQUEST_DELAY_MS);
+    firstPage = false;
     const start = Date.now();
     const v = await visitPage(ctx, new URL(base.path, site.baseUrl).toString(), {
       screenshot: true,

@@ -8,9 +8,10 @@ const CHALLENGE_RE =
  * Zulke pagina's geven een 401/403/429/503 + een typische challenge-titel.
  */
 export function looksBlocked(httpStatus: number | null, fp: Fingerprint | null): boolean {
-  if (httpStatus !== null && ![401, 403, 429, 503].includes(httpStatus)) return false;
-  if (!fp) return httpStatus !== null && [401, 403, 429, 503].includes(httpStatus);
-  return CHALLENGE_RE.test(fp.title) || (fp.textLength < 200 && CHALLENGE_RE.test(JSON.stringify(fp)));
+  // 401/403/429/503 = niet kunnen verifiëren (forbidden / rate-limit / WAF-block).
+  if (httpStatus !== null && [401, 403, 429, 503].includes(httpStatus)) return true;
+  // Cloudflare e.d. kan ook een 200 met een challenge-pagina geven.
+  return !!fp && CHALLENGE_RE.test(fp.title);
 }
 
 /** Relatieve drempel waarboven een aantal-verandering opvalt. */
