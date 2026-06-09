@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Smoke-checks dashboard</title>
+    <title>Smoke-checks · Sites</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="topbar">
       <h1>Smoke-checks</h1>
       <nav class="mainnav">
-        <a href="index.html" class="active">Dashboard</a>
-        <a href="sites.html">Sites</a>
+        <a href="index.html">Dashboard</a>
+        <a href="sites.html" class="active">Sites</a>
       </nav>
       <span class="spacer"></span>
       <button id="logout" hidden>Uitloggen</button>
@@ -28,17 +28,30 @@
         </form>
       </section>
 
-      <section id="dashboard" hidden>
-        <div id="meta" class="meta"></div>
-        <div id="sites" class="grid"></div>
-      </section>
+      <div id="mgr" hidden>
+        <section id="pending-wrap" class="card pending-card" hidden>
+          <h2>Nieuwe aanmeldingen</h2>
+          <div id="pending"></div>
+        </section>
+
+        <div class="mgr-grid">
+          <section class="card">
+            <h2>Sites</h2>
+            <div id="site-list"></div>
+            <button id="add-site" class="btn add">+ Site toevoegen</button>
+          </section>
+
+          <section id="editor" class="card">
+            <p class="muted">Kies links een site om te bewerken, of voeg er een toe.</p>
+          </section>
+        </div>
+      </div>
 
       <p id="loading">Laden…</p>
     </main>
 
-    <!-- Klassieke scripts: werkt door dubbelklik (file://) én op GitHub Pages -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
-    <script src="app.js"></script>
+    <script src="sites.js"></script>
   </body>
 </html>

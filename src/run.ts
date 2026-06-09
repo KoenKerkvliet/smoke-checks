@@ -1,25 +1,17 @@
 import { chromium, type Browser } from "playwright";
-import { readFileSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SiteConfig, CheckResult, RunSummary } from "./types";
 import { uploadResults } from "./supabase";
+import { loadSites } from "./config";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
-const SITES_DIR = join(ROOT, "sites");
 const RESULTS_DIR = join(ROOT, "results");
 
 function slugify(s: string): string {
   return s.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "page";
-}
-
-function loadSites(filter?: string): SiteConfig[] {
-  const files = readdirSync(SITES_DIR).filter((f) => f.endsWith(".json"));
-  const sites = files.map(
-    (f) => JSON.parse(readFileSync(join(SITES_DIR, f), "utf8")) as SiteConfig,
-  );
-  return filter ? sites.filter((s) => s.slug === filter) : sites;
 }
 
 async function runSite(browser: Browser, site: SiteConfig): Promise<CheckResult[]> {
@@ -97,7 +89,7 @@ async function runSite(browser: Browser, site: SiteConfig): Promise<CheckResult[
 
 async function main(): Promise<void> {
   const filter = process.env.SITE_FILTER?.trim() || process.argv[2];
-  const sites = loadSites(filter);
+  const sites = await loadSites(filter);
   if (sites.length === 0) {
     console.error(`Geen sites gevonden${filter ? ` voor filter '${filter}'` : ""}.`);
     process.exit(1);
