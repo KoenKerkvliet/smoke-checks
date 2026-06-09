@@ -1,5 +1,18 @@
 import type { Fingerprint, Deviation } from "./types";
 
+const CHALLENGE_RE =
+  /just a moment|checking your browser|attention required|verify you are human|verifying you are human|cloudflare|access denied|ddos protection|please wait while|enable javascript and cookies/i;
+
+/**
+ * Herkent een bot-/WAF-challenge (Cloudflare e.d.) i.p.v. de echte pagina.
+ * Zulke pagina's geven een 401/403/429/503 + een typische challenge-titel.
+ */
+export function looksBlocked(httpStatus: number | null, fp: Fingerprint | null): boolean {
+  if (httpStatus !== null && ![401, 403, 429, 503].includes(httpStatus)) return false;
+  if (!fp) return httpStatus !== null && [401, 403, 429, 503].includes(httpStatus);
+  return CHALLENGE_RE.test(fp.title) || (fp.textLength < 200 && CHALLENGE_RE.test(JSON.stringify(fp)));
+}
+
 /** Relatieve drempel waarboven een aantal-verandering opvalt. */
 const COUNT_REL_THRESHOLD = 0.6; // 60%
 const TEXT_REL_THRESHOLD = 0.4; // 40%

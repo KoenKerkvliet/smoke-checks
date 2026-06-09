@@ -6,22 +6,54 @@ import type { SiteConfig, CheckResult, RunSummary, Baseline } from "./types";
 import { loadSites } from "./config";
 import { crawlSite } from "./crawl";
 import { visitPage } from "./fingerprint";
-import { compareFingerprints } from "./diff";
+import { compareFingerprints, looksBlocked } from "./diff";
 import { uploadResults, loadBaselines, saveBaselines } from "./supabase";
+import type { VisitResult } from "./fingerprint";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const RESULTS_DIR = join(ROOT, "results");
 const CRAWL_LIMIT = Number(process.env.CRAWL_LIMIT) || 15;
 
+// Realistische browser-UA i.p.v. Playwright's "HeadlessChrome" (triggert minder bot-protectie).
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+function newCtx(browser: Browser) {
+  return browser.newContext({ userAgent: USER_AGENT, locale: "nl-NL" });
+}
+
+function blockedResult(slug: string, path: string, v: VisitResult, suffix: string): CheckResult {
+  return {
+    siteSlug: slug,
+    path,
+    name: path,
+    status: "pass",
+    httpStatus: v.httpStatus,
+    messages: [`Geblokkeerd door bot-bescherming (HTTP ${v.httpStatus ?? "?"}) — ${suffix}`],
+    durationMs: 0,
+    screenshotPath: v.screenshotPath,
+    deviations: [
+      {
+        field: "blocked",
+        baseline: null,
+        current: v.httpStatus,
+        severity: "medium",
+        message: "Geblokkeerd door bot-bescherming (challenge-pagina)",
+      },
+    ],
+    fingerprint: v.fingerprint,
+  };
+}
+
 /* ---------------- Scan: nulmeting vastleggen ---------------- */
 async function scanSite(browser: Browser, site: SiteConfig): Promise<CheckResult[]> {
-  const ctx = await browser.newContext();
+  const ctx = await newCtx(browser);
   const visits = await crawlSite(ctx, site.baseUrl, site.slug, RESULTS_DIR, CRAWL_LIMIT);
   await ctx.close();
 
   const baselines: Baseline[] = visits
-    .filter((v) => v.fingerprint)
+    .filter((v) => v.fingerprint && !looksBlocked(v.httpStatus, v.fingerprint))
     .map((v) => ({
       path: v.path,
       url: v.url,
@@ -33,6 +65,8 @@ async function scanSite(browser: Browser, site: SiteConfig): Promise<CheckResult
   await saveBaselines(site.slug, baselines, RESULTS_DIR);
 
   return visits.map((v) => {
+    if (looksBlocked(v.httpStatus, v.fingerprint))
+      return blockedResult(site.slug, v.path, v, "niet als nulmeting vastgelegd");
     const ok = !v.error && (v.httpStatus ?? 0) < 400;
     return {
       siteSlug: site.slug,
@@ -51,7 +85,7 @@ async function scanSite(browser: Browser, site: SiteConfig): Promise<CheckResult
 /* ---------------- Test: drift t.o.v. nulmeting ---------------- */
 async function testSite(browser: Browser, site: SiteConfig): Promise<CheckResult[]> {
   const baselines = await loadBaselines(site.slug, RESULTS_DIR);
-  const ctx = await browser.newContext();
+  const ctx = await newCtx(browser);
   const results: CheckResult[] = [];
 
   if (baselines.length === 0) {
@@ -87,6 +121,11 @@ async function testSite(browser: Browser, site: SiteConfig): Promise<CheckResult
       siteSlug: site.slug,
       path: base.path,
     });
+
+    if (looksBlocked(v.httpStatus, v.fingerprint)) {
+      results.push(blockedResult(site.slug, base.path, v, "drift niet vergeleken"));
+      continue;
+    }
 
     const messages: string[] = [];
     let status: "pass" | "fail" = "pass";
