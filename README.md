@@ -50,15 +50,30 @@ Zonder Supabase-credentials draait het prima — dan alleen lokaal.
 5. Dashboard: kopieer `dashboard/config.example.js` → `dashboard/config.js`
    en vul `supabaseUrl` + **anon** key in (publiek, beschermd door RLS).
 
-## Trigger na plugin-update
+## Auto-aanmelden + trigger (DP Toolbox)
 
-Plaats `integrations/dp-toolbox-trigger.php` als DP Toolbox code-snippet of
-mu-plugin op de site, en zet in `wp-config.php`:
+Plaats `integrations/dp-toolbox-smoke-checks.php` als DP Toolbox code-snippet of
+mu-plugin op de site. Die doet twee dingen:
+
+1. **Auto-aanmelden** bij activatie → de site verschijnt **pending** in het
+   dashboard en moet daar goedgekeurd worden (edge function `enroll-site`).
+2. **Trigger** na elke plugin-update → start een run voor die site.
+
+Config in `wp-config.php`:
 
 ```php
-define('SMOKE_GH_TOKEN', 'github_pat_...'); // fine-grained PAT, alleen deze repo
-define('SMOKE_SITE_SLUG', 'tvrapid');
+define('SMOKE_ENROLL_SECRET', '...');        // enroll-secret uit Supabase (app_config)
+define('SMOKE_GH_TOKEN', 'github_pat_...');  // optioneel: fine-grained PAT voor de update-trigger
+// define('SMOKE_SITE_SLUG', 'eigen-slug');  // optioneel; standaard afgeleid van de host
 ```
+
+De slug wordt standaard afgeleid van de host (`tvrapid.nl` → `tvrapid-nl`).
+
+### Enroll-functie
+
+Broncode in `supabase/functions/enroll-site/`. Deploy met `verify_jwt=false`
+(eigen secret-auth). Het secret staat in de privé-tabel `app_config`
+(`key = 'enroll_secret'`), alleen leesbaar met de service-role.
 
 ## Een site toevoegen
 
