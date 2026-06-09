@@ -124,3 +124,18 @@ tr.warn td { background: #fff8e6; }
 tr.warn td:first-child { color: #bf8700; }
 .site.warn { border-left: 4px solid #bf8700; }
 .site.warn .badge { background: #bf8700; }
+
+/* ---------- Recente runs ---------- */
+.block-title { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 22px 0 8px; }
+table.recent { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.recent th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--border); }
+table.recent td { padding: 8px 10px; border-top: 1px solid var(--border); }
+tr.recent-row { cursor: pointer; }
+tr.recent-row:hover td { background: #f6f8fa; }
+tr.recent-row.sel td { background: #eaf2ff; }
+.mode { font-size: 11px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; }
+.pill { font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; color: #fff; }
+.pill.good { background: var(--good); }
+.pill.warn { background: #bf8700; }
+.pill.bad { background: var(--bad); }
+.txt-warn { color: #bf8700; }

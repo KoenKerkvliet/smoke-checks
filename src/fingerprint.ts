@@ -1,7 +1,52 @@
-import type { BrowserContext } from "playwright";
+import type { BrowserContext, Page } from "playwright";
 import { mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import type { Fingerprint } from "./types";
+
+/**
+ * Triggert lazy-loading (galleries, banners) door de pagina te scrollen en te wachten
+ * tot het netwerk + de <img>-elementen klaar zijn. Anders ontbreken lazy-foto's op de screenshot.
+ */
+async function settlePage(page: Page): Promise<void> {
+  await page
+    .evaluate(async () => {
+      await new Promise<void>((resolve) => {
+        let y = 0;
+        const step = Math.max(400, Math.floor(window.innerHeight * 0.8));
+        const tick = () => {
+          window.scrollTo(0, y);
+          y += step;
+          if (y < document.body.scrollHeight) setTimeout(tick, 80);
+          else {
+            window.scrollTo(0, 0);
+            resolve();
+          }
+        };
+        tick();
+      });
+    })
+    .catch(() => {});
+
+  await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+
+  await page
+    .evaluate(async () => {
+      const pending = Array.from(document.images).filter((i) => !i.complete);
+      await Promise.race([
+        Promise.all(
+          pending.map(
+            (i) =>
+              new Promise((res) => {
+                i.addEventListener("load", res, { once: true });
+                i.addEventListener("error", res, { once: true });
+              }),
+          ),
+        ),
+        new Promise((res) => setTimeout(res, 5000)),
+      ]);
+    })
+    .catch(() => {});
+}
 
 export interface VisitResult {
   path: string;
@@ -36,6 +81,11 @@ export async function visitPage(
   try {
     const resp = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
     out.httpStatus = resp?.status() ?? null;
+
+    // Lazy-loaded content (galleries/banners) laten laden vóór fingerprint + screenshot.
+    if ((out.httpStatus ?? 0) < 400) {
+      await settlePage(page);
+    }
 
     out.fingerprint = await page.evaluate(() => {
       const q = (sel: string) => document.querySelectorAll(sel).length;

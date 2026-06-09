@@ -162,7 +162,11 @@ function renderEditor(id) {
     </div>
 
     <div class="scan-block">
-      <div><label class="section-label">Nulmeting &amp; monitoring</label><div id="bl-info">${blInfo}</div></div>
+      <div>
+        <label class="section-label">Nulmeting &amp; monitoring</label>
+        <div id="bl-info">${blInfo}</div>
+        <div id="last-run" class="muted" style="font-size:12px;margin-top:4px">Laatste run: laden…</div>
+      </div>
       <div class="row">
         <button class="btn" id="scan-btn">Scan (nulmeting)</button>
         <button class="btn ghost" id="test-btn">Nu testen</button>
@@ -189,6 +193,31 @@ function renderEditor(id) {
   el("del-site").addEventListener("click", () => deleteSite(id, s.name));
   el("scan-btn").addEventListener("click", () => triggerRun(s.slug, "scan"));
   el("test-btn").addEventListener("click", () => triggerRun(s.slug, "test"));
+  loadLastRun(s.slug);
+}
+
+async function loadLastRun(slug) {
+  const { data } = await db
+    .from("checks")
+    .select("status,deviations,created_at,run_id,runs(mode)")
+    .eq("site_slug", slug)
+    .order("created_at", { ascending: false })
+    .limit(60);
+  const node = el("last-run");
+  if (!node) return;
+  if (!data || data.length === 0) {
+    node.textContent = "Laatste run: nog geen";
+    return;
+  }
+  const latest = data[0].run_id;
+  const checks = data.filter((c) => c.run_id === latest);
+  const failed = checks.filter((c) => c.status === "fail").length;
+  const warned = checks.filter((c) => c.status !== "fail" && (c.deviations ?? []).length > 0).length;
+  const cls = failed > 0 ? "bad" : warned > 0 ? "txt-warn" : "good";
+  const label = failed > 0 ? `${failed} fail` : warned > 0 ? `${warned} let op` : "OK";
+  const when = new Date(checks[0].created_at).toLocaleString("nl-NL");
+  const mode = checks[0].runs?.mode ?? "";
+  node.innerHTML = `Laatste run: ${when}${mode ? " · " + mode : ""} · <strong class="${cls}">${label}</strong>`;
 }
 
 async function triggerRun(slug, mode) {
