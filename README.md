@@ -57,7 +57,9 @@ mu-plugin op de site. Die doet twee dingen:
 
 1. **Auto-aanmelden** bij activatie → de site verschijnt **pending** in het
    dashboard en moet daar goedgekeurd worden (edge function `enroll-site`).
-2. **Trigger** na elke plugin-update → start een run voor die site.
+2. **Trigger** na elke plugin-, thema- of core-update → start een test-run (drift)
+   voor die site via edge function `notify-update` (debounce 2 min, alleen actieve
+   sites). Volledig zero-config — de GitHub-PAT staat server-side.
 
 **Aanmelden werkt zero-config**: het enrollment-token zit als default in het
 snippet (bewust publiek — aanmeldingen zijn approval-gated, dus het token is een
