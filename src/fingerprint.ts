@@ -86,7 +86,7 @@ export async function visitPage(
         if (!/^https?:$/.test(u.protocol)) continue;
         let p = u.pathname.replace(/\/+$/, "") || "/";
         // sla bestanden/feeds/admin over
-        if (/\.(pdf|jpg|jpeg|png|gif|svg|zip|xml|json|css|js)$/i.test(p)) continue;
+        if (/\.(pdf|jpg|jpeg|png|gif|svg|webp|avif|ico|zip|xml|json|css|js|woff2?|ttf|eot|mp4|webm|mp3)$/i.test(p)) continue;
         if (/\/wp-admin|\/wp-login|\/feed/.test(p)) continue;
         paths.add(p);
       } catch {
