@@ -13,12 +13,11 @@ const db = supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
 const el = (id) => document.getElementById(id);
 const show = (id, on = true) => el(id).toggleAttribute("hidden", !on);
 
-async function render(session) {
+function setUI(session) {
   show("login", !session);
   show("dashboard", !!session);
   show("logout", !!session);
   show("loading", false);
-  if (session) await loadData();
 }
 
 el("login-form").addEventListener("submit", async (e) => {
@@ -33,8 +32,15 @@ el("login-form").addEventListener("submit", async (e) => {
 
 el("logout").addEventListener("click", () => db.auth.signOut());
 
-db.auth.onAuthStateChange((_event, session) => render(session));
-db.auth.getSession().then(({ data }) => render(data.session));
+// Geen awaited Supabase-calls binnen onAuthStateChange (lock-deadlock); load buiten de callback.
+db.auth.onAuthStateChange((_event, session) => {
+  setUI(session);
+  if (session) setTimeout(() => loadData(), 0);
+});
+db.auth.getSession().then(({ data }) => {
+  setUI(data.session);
+  if (data.session) loadData();
+});
 
 async function loadData() {
   const { data: run } = await db

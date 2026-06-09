@@ -14,12 +14,11 @@ let sites = [];
 let selectedId = null;
 
 /* ---------- auth ---------- */
-async function render(session) {
+function setUI(session) {
   show("login", !session);
   show("mgr", !!session);
   show("logout", !!session);
   show("loading", false);
-  if (session) await loadSites();
 }
 el("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -31,8 +30,17 @@ el("login-form").addEventListener("submit", async (e) => {
   if (error) el("login-error").textContent = error.message;
 });
 el("logout").addEventListener("click", () => db.auth.signOut());
-db.auth.onAuthStateChange((_e, session) => render(session));
-db.auth.getSession().then(({ data }) => render(data.session));
+
+// LET OP: geen awaited Supabase-calls binnen onAuthStateChange (lock-deadlock).
+// Daarom UI synchroon zetten en de data-load buiten de callback plannen.
+db.auth.onAuthStateChange((_e, session) => {
+  setUI(session);
+  if (session) setTimeout(() => loadSites(), 0);
+});
+db.auth.getSession().then(({ data }) => {
+  setUI(data.session);
+  if (data.session) loadSites();
+});
 
 /* ---------- data ---------- */
 async function loadSites() {
