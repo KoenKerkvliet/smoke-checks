@@ -113,3 +113,14 @@ table.checks input[type=text] { width: 100%; padding: 6px 8px; border: 1px solid
 .del { color: var(--bad); cursor: pointer; font-size: 16px; background: none; border: 0; }
 .good { color: var(--good); }
 .bad { color: var(--bad); }
+
+/* ---------- Scan / nulmeting ---------- */
+.scan-block { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 4px 0 6px; padding: 12px 14px; background: #f6f8fa; border: 1px solid var(--border); border-radius: 8px; }
+.scan-block #bl-info { font-size: 13px; }
+.btn:disabled { opacity: 0.6; cursor: default; }
+
+/* Drift: 'let op' (medium) op het resultaten-dashboard */
+tr.warn td { background: #fff8e6; }
+tr.warn td:first-child { color: #bf8700; }
+.site.warn { border-left: 4px solid #bf8700; }
+.site.warn .badge { background: #bf8700; }

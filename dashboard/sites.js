@@ -46,7 +46,7 @@ db.auth.getSession().then(({ data }) => {
 async function loadSites() {
   const { data, error } = await db
     .from("sites")
-    .select("id,slug,name,base_url,status,site_checks(id,name,path,required_selectors,required_text,screenshot,sort)")
+    .select("id,slug,name,base_url,status,site_checks(id,name,path,required_selectors,required_text,screenshot,sort),baselines(path,captured_at)")
     .order("created_at", { ascending: true });
   if (error) {
     el("editor").innerHTML = `<p class="error">Laden mislukt: ${esc(error.message)}</p>`;
@@ -137,6 +137,10 @@ function renderEditor(id) {
   const rows = s.site_checks
     .map((c, i) => checkRow(c, i))
     .join("");
+  const bl = s.baselines ?? [];
+  const blInfo = bl.length
+    ? `Nulmeting: <strong>${bl.length}</strong> pagina${bl.length === 1 ? "" : "'s"} · ${new Date([...bl.map((b) => b.captured_at)].sort().pop()).toLocaleString("nl-NL")}`
+    : `<span class="muted">Nog geen nulmeting — doe eerst een scan.</span>`;
   el("editor").innerHTML = `
     <div class="head">
       <h2>${esc(s.name)}</h2>
@@ -157,7 +161,16 @@ function renderEditor(id) {
       </div>
     </div>
 
-    <label class="section-label">Te controleren pagina's</label>
+    <div class="scan-block">
+      <div><label class="section-label">Nulmeting &amp; monitoring</label><div id="bl-info">${blInfo}</div></div>
+      <div class="row">
+        <button class="btn" id="scan-btn">Scan (nulmeting)</button>
+        <button class="btn ghost" id="test-btn">Nu testen</button>
+      </div>
+    </div>
+    <p class="muted">Scan = verken de site en leg vast wat er is (de nulmeting). Nu testen = vergelijk de live site met de nulmeting en markeer afwijkingen. Beide draaien op de achtergrond (~1-2 min).</p>
+
+    <label class="section-label">Te controleren pagina's <span class="muted" style="font-weight:400">(optioneel — fallback als er nog geen nulmeting is)</span></label>
     <table class="checks">
       <thead><tr><th>Naam</th><th>Pad</th><th>Verplichte selectors (komma)</th><th>Screenshot</th><th></th></tr></thead>
       <tbody id="check-rows">${rows}</tbody>
@@ -174,6 +187,27 @@ function renderEditor(id) {
   });
   el("save-site").addEventListener("click", () => saveSite(id));
   el("del-site").addEventListener("click", () => deleteSite(id, s.name));
+  el("scan-btn").addEventListener("click", () => triggerRun(s.slug, "scan"));
+  el("test-btn").addEventListener("click", () => triggerRun(s.slug, "test"));
+}
+
+async function triggerRun(slug, mode) {
+  const btn = el(mode === "scan" ? "scan-btn" : "test-btn");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Bezig…";
+  const { error } = await db.functions.invoke("trigger-run", { body: { site: slug, mode } });
+  btn.disabled = false;
+  btn.textContent = label;
+  if (error) {
+    alert("Starten mislukt: " + (error.message || error));
+  } else {
+    alert(
+      mode === "scan"
+        ? "Scan gestart. De nulmeting wordt over ~1-2 min vastgelegd — herlaad daarna deze pagina."
+        : "Test gestart. Bekijk over ~1-2 min het Dashboard voor de resultaten.",
+    );
+  }
 }
 
 function checkRow(c, key) {

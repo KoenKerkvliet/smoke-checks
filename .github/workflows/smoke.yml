@@ -1,16 +1,22 @@
 name: smoke-checks
 
 on:
-  # Handmatig starten (optioneel één site via 'site'-input).
+  # Handmatig starten (site + modus).
   workflow_dispatch:
     inputs:
       site:
         description: "Site-slug (leeg = alle sites)"
         required: false
         default: ""
-  # Getriggerd door een WordPress-site na een plugin-update.
+      mode:
+        description: "Modus"
+        required: false
+        default: "test"
+        type: choice
+        options: ["test", "scan"]
+  # Getriggerd door WordPress (na update) of vanuit het dashboard (scan/test).
   repository_dispatch:
-    types: [site-updated]
+    types: [site-updated, run-requested]
   # Optioneel: dagelijkse vangnet-run (06:00 UTC). Verwijder als niet gewenst.
   schedule:
     - cron: "0 6 * * *"
@@ -37,6 +43,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           RUN_TRIGGER: ${{ github.event_name }}
           SITE_FILTER: ${{ github.event.inputs.site || github.event.client_payload.site || '' }}
+          RUN_MODE: ${{ github.event.inputs.mode || github.event.client_payload.mode || 'test' }}
         run: npm run smoke
 
       - name: Resultaten als artifact bewaren

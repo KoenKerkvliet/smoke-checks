@@ -76,9 +76,18 @@ async function loadData() {
   el("sites").innerHTML = cards.join("");
 }
 
+function rowLevel(c) {
+  if (c.status === "fail") return "fail";
+  if ((c.deviations ?? []).length > 0) return "warn";
+  return "pass";
+}
+
 async function siteCard(slug, checks) {
   const failed = checks.filter((c) => c.status === "fail").length;
-  const ok = failed === 0;
+  const warned = checks.filter((c) => rowLevel(c) === "warn").length;
+  const level = failed > 0 ? "bad" : warned > 0 ? "warn" : "good";
+  const badge = failed > 0 ? `${failed} fail` : warned > 0 ? `${warned} let op` : "OK";
+
   const rows = await Promise.all(
     checks.map(async (c) => {
       let img = "";
@@ -88,9 +97,11 @@ async function siteCard(slug, checks) {
           .createSignedUrl(c.screenshot_key, 600);
         if (data?.signedUrl) img = `<a href="${data.signedUrl}" target="_blank">screenshot</a>`;
       }
+      const lvl = rowLevel(c);
+      const icon = lvl === "fail" ? "✗" : lvl === "warn" ? "!" : "✓";
       const msg = (c.messages ?? []).join("; ");
-      return `<tr class="${c.status}">
-        <td>${c.status === "pass" ? "✓" : "✗"}</td>
+      return `<tr class="${lvl}">
+        <td>${icon}</td>
         <td>${escapeHtml(c.name ?? c.path)}</td>
         <td>${c.http_status ?? "-"}</td>
         <td>${escapeHtml(msg)}</td>
@@ -99,8 +110,8 @@ async function siteCard(slug, checks) {
     }),
   );
 
-  return `<article class="card site ${ok ? "good" : "bad"}">
-    <h3>${escapeHtml(slug)} <span class="badge">${ok ? "OK" : failed + " fail"}</span></h3>
+  return `<article class="card site ${level}">
+    <h3>${escapeHtml(slug)} <span class="badge">${badge}</span></h3>
     <table><tbody>${rows.join("")}</tbody></table>
   </article>`;
 }
