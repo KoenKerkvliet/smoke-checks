@@ -121,7 +121,8 @@ async function testSite(browser: Browser, site: SiteConfig): Promise<CheckResult
     if (!firstPage) await sleep(REQUEST_DELAY_MS);
     firstPage = false;
     const start = Date.now();
-    const v = await visitPage(ctx, new URL(base.path, site.baseUrl).toString(), {
+    const url = new URL(base.path, site.baseUrl).toString();
+    let v = await visitPage(ctx, url, {
       screenshot: true,
       resultsDir: RESULTS_DIR,
       siteSlug: site.slug,
@@ -141,9 +142,36 @@ async function testSite(browser: Browser, site: SiteConfig): Promise<CheckResult
       messages.push(v.error ?? "Geen fingerprint kunnen maken");
     }
 
-    const deviations = v.fingerprint
+    let deviations = v.fingerprint
       ? compareFingerprints(base.fingerprint, v.fingerprint, base.httpStatus, v.httpStatus)
       : [];
+
+    // Hermeten bij drift: zien we afwijkingen, laad de pagina dan nog één keer en
+    // houd alleen de afwijkingen die in BEIDE metingen voorkomen. Toevallige
+    // laad-hikjes (lazy content die net niet klaar was) komen één keer voor en
+    // worden zo weggefilterd; echte regressies blijven staan.
+    if (deviations.length > 0 && v.fingerprint && !v.error) {
+      await sleep(REQUEST_DELAY_MS);
+      const v2 = await visitPage(ctx, url, {
+        screenshot: true,
+        resultsDir: RESULTS_DIR,
+        siteSlug: site.slug,
+        path: base.path,
+      });
+      if (!looksBlocked(v2.httpStatus, v2.fingerprint) && v2.fingerprint && !v2.error) {
+        const dev2 = compareFingerprints(base.fingerprint, v2.fingerprint, base.httpStatus, v2.httpStatus);
+        const firstFields = new Set(deviations.map((d) => d.field));
+        const persisted = dev2.filter((d) => firstFields.has(d.field));
+        const dropped = deviations.length - persisted.length;
+        if (dropped > 0) {
+          messages.push(
+            `${dropped} afwijking(en) vielen weg bij hermeten (waarschijnlijk laadtiming) — genegeerd`,
+          );
+        }
+        deviations = persisted;
+        v = v2; // toon de waarden en screenshot van de tweede, stabielere meting
+      }
+    }
 
     if (deviations.some((d) => d.severity === "high")) status = "fail";
     if (deviations.length === 0 && status === "pass") {

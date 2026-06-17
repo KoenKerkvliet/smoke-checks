@@ -27,7 +27,10 @@ async function settlePage(page: Page): Promise<void> {
     })
     .catch(() => {});
 
-  await page.waitForLoadState("networkidle", { timeout: 8000 }).catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+
+  // Wacht tot webfonts geladen zijn — anders verspringt tekst/layout nog ná de meting.
+  await page.evaluate(() => (document as any).fonts?.ready).catch(() => {});
 
   await page
     .evaluate(async () => {
@@ -42,8 +45,32 @@ async function settlePage(page: Page): Promise<void> {
               }),
           ),
         ),
-        new Promise((res) => setTimeout(res, 5000)),
+        new Promise((res) => setTimeout(res, 6000)),
       ]);
+    })
+    .catch(() => {});
+
+  // Stabilisatie: wacht tot het aantal afbeeldingen, het aantal geladen afbeeldingen
+  // én de tekstlengte twee metingen op rij gelijk blijven (max ~6s). Zo wordt de
+  // fingerprint pas gemaakt als de DOM echt tot rust is — dit voorkomt valse drift
+  // door content die nog asynchroon binnenkomt.
+  await page
+    .evaluate(async () => {
+      const sample = () => ({
+        imgs: document.images.length,
+        ready: Array.from(document.images).filter((i) => i.complete).length,
+        text: (document.body?.innerText || "").trim().length,
+      });
+      const same = (a: ReturnType<typeof sample>, b: ReturnType<typeof sample>) =>
+        a.imgs === b.imgs && a.ready === b.ready && a.text === b.text;
+      let prev = sample();
+      let stable = 0;
+      for (let i = 0; i < 12 && stable < 2; i++) {
+        await new Promise((res) => setTimeout(res, 500));
+        const cur = sample();
+        stable = same(prev, cur) ? stable + 1 : 0;
+        prev = cur;
+      }
     })
     .catch(() => {});
 }
