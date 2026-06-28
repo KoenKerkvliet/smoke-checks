@@ -50,6 +50,24 @@ function problemLevel(c: any): "fail" | "warn" {
   return c.status === "fail" ? "fail" : "warn";
 }
 
+/** Een check is alarmwaardig bij een fail of een 'high'-afwijking (geen 'blocked'). */
+function isAlarm(c: any): boolean {
+  return (
+    c.status === "fail" ||
+    (c.deviations ?? []).some((d: any) => d.severity === "high" && d.field !== "blocked")
+  );
+}
+
+/** Handtekening van de probleemtoestand van een pagina, om 'nieuw' van 'loopt al' te onderscheiden. */
+function alarmSignature(c: any): string {
+  const high = (c.deviations ?? [])
+    .filter((d: any) => d.severity === "high" && d.field !== "blocked")
+    .map((d: any) => d.field)
+    .sort()
+    .join(",");
+  return `${c.status}|${high}`;
+}
+
 function buildEmail(site: string, when: string, problems: any[]): { html: string; text: string } {
   const rows = problems
     .map((c) => {
@@ -108,14 +126,34 @@ Deno.serve(async (req) => {
   if (!run_id) return json({ error: "run_id is verplicht" }, 400);
 
   const { data: run } = await supa.from("runs").select("created_at").eq("id", run_id).single();
+  const runAt = run?.created_at ?? new Date().toISOString();
   const { data: checks } = await supa.from("checks").select("*").eq("run_id", run_id);
 
-  const problems = (checks ?? []).filter(
-    (c: any) => c.status === "fail" || (c.deviations ?? []).some((d: any) => d.field !== "blocked"),
-  );
-  if (problems.length === 0) return json({ ok: true, no_problems: true });
+  // Stap 1: alleen echte problemen (fail of 'high'-afwijking). 'medium'-drift = geen mail.
+  const candidates = (checks ?? []).filter(isAlarm);
+  if (candidates.length === 0) return json({ ok: true, no_problems: true });
 
-  const site = [...new Set((checks ?? []).map((c: any) => c.site_slug))].join(", ");
+  // Stap 2: alleen NIEUWE/gewijzigde problemen mailen. Een probleem dat in de vorige
+  // run voor dezelfde pagina al exact zo bestond, loopt nog en wordt niet opnieuw
+  // gemaild (voorkomt elke run dezelfde mail). Een nieuw of gewijzigd probleem wel.
+  const problems: any[] = [];
+  for (const c of candidates) {
+    const { data: prev } = await supa
+      .from("checks")
+      .select("status,deviations,created_at")
+      .eq("site_slug", c.site_slug)
+      .eq("path", c.path)
+      .lt("created_at", runAt)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const prevCheck = prev?.[0];
+    const wasAlarm = prevCheck ? isAlarm(prevCheck) : false;
+    const unchanged = wasAlarm && alarmSignature(prevCheck) === alarmSignature(c);
+    if (!unchanged) problems.push(c);
+  }
+  if (problems.length === 0) return json({ ok: true, no_new: true });
+
+  const site = [...new Set(problems.map((c: any) => c.site_slug))].join(", ");
   const when = run?.created_at ? new Date(run.created_at).toLocaleString("nl-NL") : "recent";
   const subject = `Smoke-checks: ${problems.length} afwijking${problems.length === 1 ? "" : "en"} op ${site}`;
   const { html, text } = buildEmail(site, when, problems);

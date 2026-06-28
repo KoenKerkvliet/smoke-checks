@@ -88,6 +88,32 @@ export async function saveBaselines(
   console.log(`✓ Nulmeting opgeslagen in Supabase (${baselines.length} pagina's).`);
 }
 
+/**
+ * Telt hoeveel van de meest recente metingen voor deze pagina achter elkaar
+ * 'onbereikbaar' waren (deviation-veld 'unreachable'). Wordt gebruikt om pas te
+ * escaleren naar een echt alarm als een site meerdere runs op rij niet laadt.
+ * Zonder Supabase (lokale modus) is er geen historie → 0.
+ */
+export async function recentUnreachableStreak(slug: string, path: string): Promise<number> {
+  const db = getClient();
+  if (!db) return 0;
+  const { data, error } = await db
+    .from("checks")
+    .select("deviations,created_at")
+    .eq("site_slug", slug)
+    .eq("path", path)
+    .order("created_at", { ascending: false })
+    .limit(6);
+  if (error || !data) return 0;
+  let streak = 0;
+  for (const c of data as { deviations?: { field?: string }[] }[]) {
+    const unreachable = (c.deviations ?? []).some((d) => d.field === "unreachable");
+    if (unreachable) streak++;
+    else break;
+  }
+  return streak;
+}
+
 /* ---------------- Run-resultaten ---------------- */
 
 export async function uploadResults(summary: RunSummary, resultsDir: string): Promise<string | null> {
@@ -162,6 +188,7 @@ export async function maybeSendReport(runId: string): Promise<void> {
     if (data.sent) console.log(`✉ E-mailrapport verstuurd (${data.problems} probleem/problemen).`);
     else if (data.skipped) console.log(`ℹ E-mail overgeslagen: ${data.skipped}`);
     else if (data.no_problems) console.log("ℹ Geen e-mail nodig (geen problemen).");
+    else if (data.no_new) console.log("ℹ Geen e-mail nodig (problemen lopen al — geen nieuwe).");
     else if (!resp.ok) console.error(`E-mailrapport faalde: ${resp.status}`, data);
   } catch (e) {
     console.error("E-mailrapport mislukt:", e instanceof Error ? e.message : e);

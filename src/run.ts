@@ -6,8 +6,14 @@ import type { SiteConfig, CheckResult, RunSummary, Baseline } from "./types";
 import { loadSites } from "./config";
 import { crawlSite } from "./crawl";
 import { visitPage } from "./fingerprint";
-import { compareFingerprints, looksBlocked } from "./diff";
-import { uploadResults, loadBaselines, saveBaselines, maybeSendReport } from "./supabase";
+import { compareFingerprints, looksBlocked, looksMaintenance, looksUnreachable } from "./diff";
+import {
+  uploadResults,
+  loadBaselines,
+  saveBaselines,
+  maybeSendReport,
+  recentUnreachableStreak,
+} from "./supabase";
 import type { VisitResult } from "./fingerprint";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -49,6 +55,64 @@ function blockedResult(slug: string, path: string, v: VisitResult, suffix: strin
   };
 }
 
+function maintenanceResult(slug: string, path: string, v: VisitResult): CheckResult {
+  return {
+    siteSlug: slug,
+    path,
+    name: path,
+    status: "pass",
+    httpStatus: v.httpStatus,
+    messages: ["Onderhoudsmodus gedetecteerd — overgeslagen (geen alarm)"],
+    durationMs: 0,
+    screenshotPath: v.screenshotPath,
+    deviations: [
+      {
+        field: "maintenance",
+        baseline: null,
+        current: v.fingerprint?.title ?? null,
+        severity: "medium",
+        message: "Site staat in onderhoudsmodus",
+      },
+    ],
+    fingerprint: v.fingerprint,
+  };
+}
+
+/**
+ * Bouwt het resultaat voor een onbereikbare pagina (timeout/connection-fout).
+ * Normaal 'inconclusief' (pass, medium → geen mail). Pas bij de 3e keer op rij
+ * onbereikbaar escaleren naar een echt alarm (fail, high → mail één keer).
+ */
+function unreachableResult(slug: string, path: string, v: VisitResult, priorStreak: number): CheckResult {
+  const total = priorStreak + 1;
+  const escalate = total >= 3;
+  return {
+    siteSlug: slug,
+    path,
+    name: path,
+    status: escalate ? "fail" : "pass",
+    httpStatus: v.httpStatus,
+    messages: [
+      escalate
+        ? `Site al ${total} runs op rij onbereikbaar (timeout/connection) — mogelijk down`
+        : "Site onbereikbaar (timeout/connection) — niet als fout gerekend (inconclusief)",
+    ],
+    durationMs: 0,
+    deviations: [
+      {
+        field: "unreachable",
+        baseline: null,
+        current: v.error ?? "onbereikbaar",
+        severity: escalate ? "high" : "medium",
+        message: escalate
+          ? `Onbereikbaar (${total}e keer op rij)`
+          : "Onbereikbaar (timeout/connection)",
+      },
+    ],
+    fingerprint: null,
+  };
+}
+
 /* ---------------- Scan: nulmeting vastleggen ---------------- */
 async function scanSite(browser: Browser, site: SiteConfig): Promise<CheckResult[]> {
   const ctx = await newCtx(browser);
@@ -56,7 +120,12 @@ async function scanSite(browser: Browser, site: SiteConfig): Promise<CheckResult
   await ctx.close();
 
   const baselines: Baseline[] = visits
-    .filter((v) => v.fingerprint && !looksBlocked(v.httpStatus, v.fingerprint))
+    .filter(
+      (v) =>
+        v.fingerprint &&
+        !looksBlocked(v.httpStatus, v.fingerprint) &&
+        !looksMaintenance(v.fingerprint),
+    )
     .map((v) => ({
       path: v.path,
       url: v.url,
@@ -129,8 +198,21 @@ async function testSite(browser: Browser, site: SiteConfig): Promise<CheckResult
       path: base.path,
     });
 
+    // Onbereikbaar (timeout/connection): inconclusief, pas alarm na 3x op rij.
+    if (v.error && looksUnreachable(v.error)) {
+      const streak = await recentUnreachableStreak(site.slug, base.path);
+      results.push(unreachableResult(site.slug, base.path, v, streak));
+      continue;
+    }
+
     if (looksBlocked(v.httpStatus, v.fingerprint)) {
       results.push(blockedResult(site.slug, base.path, v, "drift niet vergeleken"));
+      continue;
+    }
+
+    // Onderhoudsmodus: geen echte fout, overslaan.
+    if (looksMaintenance(v.fingerprint)) {
+      results.push(maintenanceResult(site.slug, base.path, v));
       continue;
     }
 
@@ -245,9 +327,14 @@ async function main(): Promise<void> {
     return null;
   });
 
-  // E-mailrapport bij echte problemen (fails of niet-geblokkeerde drift).
+  // E-mailrapport ALLEEN bij echte problemen: een fail, of een afwijking met
+  // severity 'high' (landmark verdwenen, telling → 0, HTTP-fout, tekst weg).
+  // 'medium'-drift ("sterk veranderd", titelwijziging e.d.) is op levende sites
+  // meestal ruis en blijft alleen zichtbaar in het dashboard — geen mail.
   const notable = all.some(
-    (c) => c.status === "fail" || (c.deviations ?? []).some((d) => d.field !== "blocked"),
+    (c) =>
+      c.status === "fail" ||
+      (c.deviations ?? []).some((d) => d.severity === "high" && d.field !== "blocked"),
   );
   if (runId && notable) await maybeSendReport(runId);
 

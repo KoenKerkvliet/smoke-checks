@@ -7,7 +7,38 @@ import type { Fingerprint } from "./types";
  * Triggert lazy-loading (galleries, banners) door de pagina te scrollen en te wachten
  * tot het netwerk + de <img>-elementen klaar zijn. Anders ontbreken lazy-foto's op de screenshot.
  */
+/**
+ * Klikt best-effort een cookie-/consent-banner weg vóór de meting. Zulke banners
+ * laten knoppen en soms hele content-blokken conditioneel zien, wat anders steeds
+ * als drift wordt gezien. Faalt stil als er geen banner is.
+ */
+async function dismissCookieBanner(page: Page): Promise<void> {
+  await page
+    .evaluate(async () => {
+      const ACCEPT_RE =
+        /^(accepteer|accepteren|alles accepteren|alle.* accepteren|akkoord|ik ga akkoord|toestaan|sta toe|accept all|accept|allow all|agree|i agree|got it|ok)$/i;
+      const clickable = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          'button, a[role=button], [role=button], input[type=button], input[type=submit]',
+        ),
+      );
+      const hit = clickable.find((b) => {
+        const t = (b.innerText || (b as HTMLInputElement).value || b.getAttribute("aria-label") || "")
+          .replace(/\s+/g, " ")
+          .trim();
+        return ACCEPT_RE.test(t);
+      });
+      if (hit) {
+        hit.click();
+        await new Promise((res) => setTimeout(res, 400));
+      }
+    })
+    .catch(() => {});
+}
+
 async function settlePage(page: Page): Promise<void> {
+  await dismissCookieBanner(page);
+
   await page
     .evaluate(async () => {
       await new Promise<void>((resolve) => {

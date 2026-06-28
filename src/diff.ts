@@ -14,9 +14,46 @@ export function looksBlocked(httpStatus: number | null, fp: Fingerprint | null):
   return !!fp && CHALLENGE_RE.test(fp.title);
 }
 
+const MAINTENANCE_RE =
+  /onderhoud|maintenance|tijdelijk niet beschikbaar|temporarily unavailable|be right back|coming soon|site will be available soon/i;
+
+/**
+ * Herkent een onderhoudspagina ("Site is undergoing maintenance" e.d.). Die geeft
+ * een 200 met een onderhoudsmelding — geen echte fout, dus niet alarmeren.
+ */
+export function looksMaintenance(fp: Fingerprint | null): boolean {
+  return !!fp && MAINTENANCE_RE.test(fp.title);
+}
+
+const UNREACHABLE_RE =
+  /timeout|ERR_CONNECTION|ERR_TIMED_OUT|ERR_NAME_NOT_RESOLVED|ERR_ADDRESS_UNREACHABLE|ERR_NETWORK|ERR_EMPTY_RESPONSE|net::|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|socket hang up/i;
+
+/**
+ * Herkent een netwerk-/laadfout (timeout, connection refused, DNS): de site was
+ * niet te bereiken. Dat betekent niet automatisch dat de site kapot is — vaak
+ * blokkeert de host alleen het datacenter-IP van de runner. Behandel als
+ * 'inconclusief', niet als harde fout (pas escaleren na meerdere keren).
+ */
+export function looksUnreachable(error: string | null | undefined): boolean {
+  return !!error && UNREACHABLE_RE.test(error);
+}
+
 /** Relatieve drempel waarboven een aantal-verandering opvalt. */
 const COUNT_REL_THRESHOLD = 0.6; // 60%
 const TEXT_REL_THRESHOLD = 0.4; // 40%
+
+/**
+ * Normaliseert een paginatitel voor vergelijking: witruimte opschonen en een
+ * SEO-/site-naam-suffix achter een scheidingsteken (" | ", " – ", " — ", " - ")
+ * weghalen. Zo telt "T.V. Rapid" en "T.V. Rapid – website | Design Pixels" als
+ * dezelfde titel — een SEO-plugin die een suffix toevoegt is geen echte wijziging.
+ */
+function titleCore(title: string): string {
+  const norm = (title || "").replace(/\s+/g, " ").trim();
+  // Pak het deel vóór het eerste " | ", " – ", " — " of " - ".
+  const core = norm.split(/\s+[|–—-]\s+/)[0]?.trim() ?? norm;
+  return core || norm;
+}
 
 const LANDMARK_LABEL: Record<string, string> = {
   header: "header",
@@ -58,8 +95,9 @@ export function compareFingerprints(
     });
   }
 
-  // Titel
-  if ((base.title || "") !== (cur.title || "")) {
+  // Titel — vergelijk de genormaliseerde kern (zonder SEO-/site-naam-suffix),
+  // zodat een toegevoegde of gewijzigde suffix geen vals alarm geeft.
+  if (titleCore(base.title) !== titleCore(cur.title)) {
     dev.push({
       field: "title",
       baseline: base.title,
