@@ -1,0 +1,35 @@
+name: keepalive
+
+# GitHub schakelt geplande workflows automatisch uit na 60 dagen zonder
+# repository-activiteit. Deze workflow houdt de teller op nul met een lege
+# commit per maand, en zet als vangnet de geplande workflows sowieso weer aan.
+
+on:
+  schedule:
+    - cron: "0 5 1 * *" # 1e van de maand, 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lege commit pushen (reset de inactiviteitsteller)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "keepalive: repo actief houden [skip ci]"
+          git push
+
+      - name: Geplande workflows weer inschakelen (vangnet)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/smoke.yml/enable"
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/keepalive.yml/enable"
